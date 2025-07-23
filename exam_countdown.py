@@ -48,311 +48,214 @@ DEFAULT_CONFIG = {
     # "EMAIL_RECIPIENT": "1801169454@qq.com",
     "EMAIL_RECIPIENT": "2698620537@qq.com",
     "EMAIL_CONNECTION_TYPE": "SSL",  # SSL或TLS
-
-    # 考研日期
-    "EXAM_YEAR": 2025,
-    "EXAM_MONTH": 12,
-    "EXAM_DAY": 21
 }
+
+# 考研日期（2025年12月21日）
+EXAM_DATE = datetime(2025, 12, 21, 0, 0, 0)
 
 
 class ExamCountdownSystem:
-    def __init__(self, config=None):
-        self.config = config if config else DEFAULT_CONFIG.copy()
-        self.encouragement = ""
+    def __init__(self):
+        # 优先使用环境变量中的配置，否则使用默认配置
+        self.config = {
+            "DEEPSEEK_API_KEY": os.getenv("DEEPSEEK_API_KEY", DEFAULT_CONFIG["DEEPSEEK_API_KEY"]),
+            "DEEPSEEK_API_BASE_URL": os.getenv("DEEPSEEK_API_BASE_URL", DEFAULT_CONFIG["DEEPSEEK_API_BASE_URL"]),
+            "DEEPSEEK_MODEL": os.getenv("DEEPSEEK_MODEL", DEFAULT_CONFIG["DEEPSEEK_MODEL"]),
+            "EMAIL_HOST": os.getenv("EMAIL_HOST", DEFAULT_CONFIG["EMAIL_HOST"]),
+            "EMAIL_PORT_SSL": int(os.getenv("EMAIL_PORT_SSL", DEFAULT_CONFIG["EMAIL_PORT_SSL"])),
+            "EMAIL_PORT_TLS": int(os.getenv("EMAIL_PORT_TLS", DEFAULT_CONFIG["EMAIL_PORT_TLS"])),
+            "EMAIL_USER": os.getenv("EMAIL_USER", DEFAULT_CONFIG["EMAIL_USER"]),
+            "EMAIL_PASSWORD": os.getenv("EMAIL_PASSWORD", DEFAULT_CONFIG["EMAIL_PASSWORD"]),
+            "EMAIL_RECIPIENT": os.getenv("EMAIL_RECIPIENT", DEFAULT_CONFIG["EMAIL_RECIPIENT"]),
+            "EMAIL_CONNECTION_TYPE": os.getenv("EMAIL_CONNECTION_TYPE", DEFAULT_CONFIG["EMAIL_CONNECTION_TYPE"]),
+        }
+        
+        # 初始化DeepSeek API客户端
+        self.client = OpenAI(
+            api_key=self.config["DEEPSEEK_API_KEY"],
+            base_url=self.config["DEEPSEEK_API_BASE_URL"]
+        )
 
     def calculate_countdown(self):
-        """计算距离考研的剩余时间"""
+        """计算考研倒计时"""
         try:
-            exam_date = datetime(
-                self.config["EXAM_YEAR"],
-                self.config["EXAM_MONTH"],
-                self.config["EXAM_DAY"]
-            )
             now = datetime.now()
-            delta = exam_date - now
-
-            if delta.total_seconds() < 0:
+            time_diff = EXAM_DATE - now
+            
+            if time_diff.total_seconds() > 0:
+                days = time_diff.days
+                hours, remainder = divmod(time_diff.seconds, 3600)
+                minutes, seconds = divmod(remainder, 60)
                 return {
-                    "days": 0,
-                    "hours": 0,
-                    "minutes": 0,
-                    "seconds": 0,
-                    "total_seconds": delta.total_seconds()
+                    "days": days,
+                    "hours": hours,
+                    "minutes": minutes,
+                    "seconds": seconds
                 }
-
-            days = delta.days
-            hours, remainder = divmod(delta.seconds, 3600)
-            minutes, seconds = divmod(remainder, 60)
-
-            return {
-                "days": days,
-                "hours": hours,
-                "minutes": minutes,
-                "seconds": seconds,
-                "total_seconds": delta.total_seconds()
-            }
+            else:
+                return None
         except Exception as e:
-            logger.error(f"计算倒计时出错: {e}")
-            logger.error(traceback.format_exc())
+            logger.error(f"计算倒计时失败: {e}")
             return None
 
     def generate_encouragement(self):
         """调用DeepSeek API生成鼓励语"""
         try:
             countdown = self.calculate_countdown()
-            if not countdown or countdown["total_seconds"] < 0:
-                logger.warning("考研日期已过，无法生成鼓励语")
-                return "考研日期已过，恭喜你完成了这场战役！"
-
-            days_left = countdown["days"]
-
-            # 获取API配置
-            api_key = self.config["DEEPSEEK_API_KEY"]
-            api_base = self.config["DEEPSEEK_API_BASE_URL"]
-            model = self.config["DEEPSEEK_MODEL"]
-
-            if not api_key or not api_base or not model:
-                logger.error("DeepSeek API配置不完整")
-                return None
-
-            # 初始化客户端
-            client = OpenAI(
-                base_url=api_base,
-                api_key=api_key
-            )
-
-            # 构造提示词
-            system_prompt = "你是盼盼的男朋友昊昊，用亲昵、温柔的语气写考研鼓励语，符合男朋友的身份。注意使用正确的中文标点符号，如逗号、句号、感叹号等，保持语言流畅自然。"
-            user_prompt = f"""请以昊昊的口吻给盼盼写一段鼓励语，包含以下要点：
-            1. 距离考研还有{days_left}天
-            2. 称呼用"盼盼"或"亲爱的"
-            3. 表达支持和信任，强调她的潜力
-            4. 长度100-150字，不要在结尾署名，不要添加任何符号如"——"
-            5. 请正确使用标点符号，不要省略标点，保持语言流畅自然
-            直接输出鼓励语，不要多余内容。"""
-
-            # 调用API
-            response = client.chat.completions.create(
-                model=model,
+            if not countdown:
+                return "考研时间已到！"
+            
+            days = countdown["days"]
+            
+            # 系统提示词
+            system_prompt = """你是一个温暖贴心的考研倒计时助手。你的任务是根据考研剩余天数生成一段鼓励语，帮助考生保持积极心态。请遵循以下要求：
+1. 语气要温暖、积极、有力量
+2. 内容要简洁明了，不宜过长
+3. 可以适当引用一些励志名言或诗句
+4. 不要包含任何负面或消极的内容
+5. 输出格式为纯文本，不要使用任何Markdown或HTML标记"""
+            
+            # 用户提示词
+            user_prompt = f"考研还剩{days}天，请生成一段鼓励语。"
+            
+            # 调用DeepSeek API
+            response = self.client.chat.completions.create(
+                model=self.config["DEEPSEEK_MODEL"],
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.8,
-                max_tokens=300
+                max_tokens=200,
+                temperature=0.7
             )
-
-            # 处理结果
-            encouragement = response.choices[0].message.content.strip()
-            encouragement = encouragement.replace("爱你的昊昊", "").replace("——", "").strip()
-            self.encouragement = encouragement
-
-            logger.info("鼓励语生成成功")
-            return self.encouragement
+            
+            return response.choices[0].message.content.strip()
         except Exception as e:
-            logger.error(f"生成鼓励语出错: {e}")
+            logger.error(f"生成鼓励语失败: {e}")
             logger.error(traceback.format_exc())
-            self.encouragement = None
             return None
 
-    def send_email(self):
-        """发送包含倒计时和鼓励语的邮件"""
+    def send_email(self, subject="考研倒计时"):
+        """发送邮件"""
         try:
-            # 检查鼓励语
-            if not self.encouragement:
-                logger.warning("没有可用的鼓励语，尝试生成...")
-                self.generate_encouragement()
-                if not self.encouragement:
-                    logger.error("无法生成鼓励语，邮件发送失败")
-                    return False
-
-            # 检查倒计时
+            # 获取倒计时和鼓励语
             countdown = self.calculate_countdown()
-            if not countdown:
-                logger.error("无法计算倒计时，邮件发送失败")
+            encouragement = self.generate_encouragement()
+            
+            if not countdown or not encouragement:
+                logger.error("缺少倒计时或鼓励语，无法发送邮件")
                 return False
-
-            days_left = countdown["days"]
-            countdown_text = f"距离考研还有 {days_left} 天 {countdown['hours']} 小时 {countdown['minutes']} 分 {countdown['seconds']} 秒"
-
+            
             # 获取邮件配置
-            email_host = self.config["EMAIL_HOST"]
-            email_user = self.config["EMAIL_USER"]
-            email_password = self.config["EMAIL_PASSWORD"]
-            email_recipient = self.config["EMAIL_RECIPIENT"]
+            host = self.config["EMAIL_HOST"]
+            user = self.config["EMAIL_USER"]
+            password = self.config["EMAIL_PASSWORD"]
+            recipient = self.config["EMAIL_RECIPIENT"]
             connection_type = self.config["EMAIL_CONNECTION_TYPE"]
-
+            
             # 根据连接类型选择端口
-            if connection_type == "SSL":
-                email_port = self.config["EMAIL_PORT_SSL"]
-            else:  # TLS
-                email_port = self.config["EMAIL_PORT_TLS"]
-
-            if not all([email_host, email_user, email_password, email_recipient]):
-                logger.error("邮件配置不完整")
-                return False
-
-            logger.info(f"尝试使用{connection_type}连接到{email_host}:{email_port}发送邮件")
-
-            # 构建邮件
-            msg = MIMEMultipart('alternative')
-            msg['Subject'] = f"📚 考研倒计时：{days_left} 天！（测试邮件）"  # 测试邮件标题添加标识
-            msg['From'] = email_user
-            msg['To'] = email_recipient
-
-            # HTML内容
-            html_template = """
+            if connection_type.upper() == "SSL":
+                port = self.config["EMAIL_PORT_SSL"]
+            else:
+                port = self.config["EMAIL_PORT_TLS"]
+            
+            # 构建HTML邮件内容
+            html_content = f"""
             <html>
-            <head>
-                <style>
-                    body {{font-family: "Microsoft YaHei", Arial, sans-serif; line-height: 1.8; color: #ffffff; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #000000;}}
-                    h1 {{color: #ffffff; text-align: center; font-size: 24px; margin-bottom: 25px; text-shadow: 0 0 10px rgba(30, 144, 255, 0.7);}}
-                    .countdown {{font-size: 18px; color: #ffffff; border-top: 1px solid #1e90ff; border-bottom: 1px solid #1e90ff; padding: 10px 0; margin: 15px 0;}}
-                    .encouragement {{color: #ffffff; padding: 10px 0; margin: 0; line-height: 1.8; text-indent: 1em;}}
-                    .signature {{text-align: right; color: #ffffff; margin-top: 20px; font-style: italic;}}
-                    .blue-bar {{
-                        background: linear-gradient(to bottom, #00bfff, #1e90ff);
-                        width: 5px;
-                        height: 100%;
-                        margin-right: 8px;
-                        float: left;
-                        border-radius: 3px;
-                        box-shadow: 0 0 8px rgba(30, 144, 255, 0.8);
-                    }}
-                    .content {{margin-left: 0; flex: 1;}}
-                    .message-container {{
-                        background-color: rgba(30, 144, 255, 0.1);
-                        border-radius: 10px;
-                        padding: 20px;
-                        margin-top: 15px;
-                        box-shadow: 0 0 15px rgba(0, 0, 0, 0.5) inset, 0 0 5px rgba(30, 144, 255, 0.3);
-                        border: 1px solid rgba(30, 144, 255, 0.2);
-                    }}
-                    .emoji {{font-size: 24px; margin-right: 5px;}}
-                    .flex-container {{display: flex; align-items: stretch;}}
-                    .test-note {{color: #ffff00; text-align: center; margin-bottom: 15px; font-weight: bold;}}
-                </style>
-            </head>
-            <body>
-                <div class="test-note">这是一封测试邮件，验证系统是否正常运行</div>
-                <h1>📚 考研倒计时：{days_left} 天！</h1>
-                <div class="message-container">
-                    <div class="flex-container">
-                        <div class="blue-bar"></div>
-                        <div class="content">
-                            <p class="encouragement">{encouragement}</p>
-                            <p class="signature">—— 爱你的昊昊</p>
+            <body style="font-family: 'Microsoft YaHei', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px;">
+                <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 10px; padding: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+                    <h2 style="color: #333; text-align: center; margin-bottom: 30px;">📚 考研倒计时</h2>
+                    
+                    <div style="text-align: center; margin-bottom: 30px;">
+                        <div style="font-size: 48px; font-weight: bold; color: #667eea; margin-bottom: 10px;">{countdown['days']}</div>
+                        <div style="font-size: 18px; color: #666;">天</div>
+                    </div>
+                    
+                    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 30px;">
+                        <div style="font-size: 16px; color: #333; line-height: 1.6;">
+                            {encouragement}
                         </div>
+                    </div>
+                    
+                    <div style="text-align: center; color: #999; font-size: 14px;">
+                        <p>加油！你的努力终将成就更好的自己！</p>
+                        <p>—— 考研倒计时助手</p>
                     </div>
                 </div>
             </body>
             </html>
             """
-
-            # 替换换行符
-            formatted_encouragement = self.encouragement.replace('\n', '<br>')
-
-            # 使用format方法格式化HTML
-            html_content = html_template.format(
-                days_left=days_left,
-                encouragement=formatted_encouragement
-            )
-            msg.attach(MIMEText(html_content, 'html'))
-
-            # 发送邮件 - 优化连接处理逻辑
-            sent_successfully = False
-
-            # 首先尝试主要连接方式
+            
+            # 创建邮件对象
+            msg = MIMEMultipart()
+            msg['From'] = user
+            msg['To'] = recipient
+            msg['Subject'] = f"【测试邮件】{subject} - 距离考研还有 {countdown['days']} 天"
+            
+            # 添加HTML内容
+            msg.attach(MIMEText(html_content, 'html', 'utf-8'))
+            
+            # 发送邮件
             try:
-                if connection_type == "SSL":
-                    # 使用SSL连接
+                if connection_type.upper() == "SSL":
+                    # SSL连接
                     context = ssl.create_default_context()
-                    server = smtplib.SMTP_SSL(email_host, email_port, context=context, timeout=10)
-                    logger.info(f"已建立SSL连接到{email_host}:{email_port}")
+                    server = smtplib.SMTP_SSL(host, port, context=context)
                 else:
-                    # 使用TLS连接
-                    server = smtplib.SMTP(email_host, email_port, timeout=10)
-                    logger.info(f"已建立普通连接到{email_host}:{email_port}")
+                    # TLS连接
+                    server = smtplib.SMTP(host, port)
                     server.starttls(context=ssl.create_default_context())
-                    logger.info("已升级为TLS加密连接")
-
-                server.login(email_user, email_password)
-                logger.info(f"已登录邮箱: {email_user}")
-                server.sendmail(email_user, email_recipient, msg.as_string())
-                logger.info(f"邮件发送成功，收件人: {email_recipient}")
-                sent_successfully = True
-
-                # 安全关闭连接
-                try:
-                    server.quit()
-                except Exception as e:
-                    logger.warning(f"关闭SMTP连接时出现非致命错误: {str(e)}")
-                    # 忽略关闭连接时的错误，因为邮件已经成功发送
-
-            except Exception as e:
-                logger.error(f"{connection_type}连接发送失败: {str(e)}")
-
-                # 如果第一种方式失败，尝试备用连接方式
-                if not sent_successfully:
-                    alternative_type = "TLS" if connection_type == "SSL" else "SSL"
-                    alternative_port = self.config["EMAIL_PORT_TLS"] if connection_type == "SSL" else self.config[
-                        "EMAIL_PORT_SSL"]
-                    logger.info(f"尝试使用备用{alternative_type}连接方式...")
-
-                    try:
-                        if alternative_type == "SSL":
-                            server = smtplib.SMTP_SSL(email_host, alternative_port,
-                                                      context=ssl.create_default_context(), timeout=10)
-                            logger.info(f"已建立备用SSL连接到{email_host}:{alternative_port}")
-                        else:
-                            server = smtplib.SMTP(email_host, alternative_port, timeout=10)
-                            logger.info(f"已建立备用普通连接到{email_host}:{alternative_port}")
-                            server.starttls(context=ssl.create_default_context())
-                            logger.info("已升级为TLS加密连接")
-
-                        server.login(email_user, email_password)
-                        logger.info(f"已登录邮箱: {email_user}")
-                        server.sendmail(email_user, email_recipient, msg.as_string())
-                        logger.info(f"使用备用{alternative_type}连接成功发送邮件")
-                        sent_successfully = True
-
-                        # 更新配置为成功的连接方式
-                        self.config["EMAIL_CONNECTION_TYPE"] = alternative_type
-                        logger.info(f"已更新配置为{alternative_type}连接")
-
-                        # 安全关闭连接
-                        try:
-                            server.quit()
-                        except Exception as close_e:
-                            logger.warning(f"关闭备用SMTP连接时出现非致命错误: {str(close_e)}")
-                            # 忽略关闭连接时的错误
-
-                    except Exception as alt_e:
-                        logger.error(f"备用{alternative_type}连接也失败: {str(alt_e)}")
-
-            if sent_successfully:
-                logger.info(f"邮件发送成功，收件人: {email_recipient}，距离考研还有 {days_left} 天")
+                
+                server.login(user, password)
+                server.send_message(msg)
+                server.quit()
+                
+                logger.info("邮件发送成功")
                 return True
-            else:
-                logger.error("所有发送尝试均失败")
-                return False
-
+                
+            except Exception as e:
+                logger.error(f"邮件发送失败: {e}")
+                logger.error(traceback.format_exc())
+                
+                # 如果SSL连接失败，尝试TLS连接作为备用方案
+                try:
+                    logger.info("尝试备用连接方式...")
+                    if connection_type.upper() == "SSL":
+                        # 如果之前是SSL，现在尝试TLS
+                        server = smtplib.SMTP(host, self.config["EMAIL_PORT_TLS"])
+                        server.starttls(context=ssl.create_default_context())
+                    else:
+                        # 如果之前是TLS，现在尝试SSL
+                        context = ssl.create_default_context()
+                        server = smtplib.SMTP_SSL(host, self.config["EMAIL_PORT_SSL"], context=context)
+                    
+                    server.login(user, password)
+                    server.send_message(msg)
+                    server.quit()
+                    
+                    logger.info("使用备用连接方式邮件发送成功")
+                    return True
+                    
+                except Exception as backup_e:
+                    logger.error(f"备用连接方式也失败了: {backup_e}")
+                    logger.error(traceback.format_exc())
+                    return False
+                    
         except Exception as e:
-            logger.error(f"发送邮件过程中出现错误: {e}")
+            logger.error(f"发送邮件过程中发生错误: {e}")
             logger.error(traceback.format_exc())
             return False
 
 
 def main():
-    # 初始化系统
+    """主函数"""
     system = ExamCountdownSystem()
-
+    
     # 显示启动信息
-    logger.info("考研倒计时邮件系统已启动，首先发送测试邮件验证运行状态...")
-    print("考研倒计时邮件系统已启动，首先发送测试邮件验证运行状态...")
+    logger.info("考研倒计时邮件系统已启动，发送测试邮件验证运行状态...")
+    print("考研倒计时邮件系统已启动，发送测试邮件验证运行状态...")
 
-    # 启动时先发送测试邮件
+    # 发送测试邮件
     try:
         logger.info("开始发送测试邮件...")
         print("开始发送测试邮件...")
@@ -381,59 +284,38 @@ def main():
         logger.error(f"测试邮件发送过程中发生错误: {e}")
         logger.error(traceback.format_exc())
         print(f"测试邮件发送失败: {e}")
+        return  # 发生错误时退出
 
-    # 测试完成后进入定时发送循环
-    logger.info("测试流程结束，进入日常定时发送模式（每天早上8点发送）...")
-    print("测试流程结束，进入日常定时发送模式（每天早上8点发送）...")
+    # 发送每日邮件
+    logger.info("准备发送每日邮件...")
+    print("准备发送每日邮件...")
 
     try:
-        while True:
-            now = datetime.now()
+        # 生成鼓励语
+        logger.info("正在生成每日鼓励语...")
+        encouragement = system.generate_encouragement()
+        if encouragement:
+            logger.info("每日鼓励语生成成功")
+        else:
+            logger.error("每日鼓励语生成失败")
 
-            # 显示当前倒计时
-            countdown = system.calculate_countdown()
-            if countdown:
-                days, hours, minutes, seconds = countdown["days"], countdown["hours"], countdown["minutes"], countdown[
-                    "seconds"]
-                logger.info(f"当前倒计时: {days}天 {hours}小时 {minutes}分 {seconds}秒")
+        # 发送每日邮件
+        logger.info("正在发送每日邮件...")
+        if system.send_email(subject="每日考研倒计时"):
+            logger.info("每日邮件发送成功")
+            print("每日邮件发送成功")
+        else:
+            logger.error("每日邮件发送失败")
+            print("每日邮件发送失败")
 
-            # 检查是否是早上8点
-            if now.hour == 8 and now.minute == 0:
-                logger.info("到达设定时间，准备发送每日邮件...")
-                print("到达设定时间，准备发送每日邮件...")
-
-                # 生成鼓励语
-                logger.info("正在生成每日鼓励语...")
-                encouragement = system.generate_encouragement()
-                if encouragement:
-                    logger.info("每日鼓励语生成成功")
-                else:
-                    logger.error("每日鼓励语生成失败")
-
-                # 发送每日邮件
-                logger.info("正在发送每日邮件...")
-                if system.send_email():
-                    logger.info("每日邮件发送成功")
-                    print("每日邮件发送成功")
-                else:
-                    logger.error("每日邮件发送失败")
-                    print("每日邮件发送失败")
-
-                # 发送完邮件后等待61秒，避免在同一分钟内重复发送
-                import time
-                time.sleep(61)
-
-            # 每分钟检查一次
-            import time
-            time.sleep(60)
-
-    except KeyboardInterrupt:
-        logger.info("程序被用户中断")
-        print("程序已停止")
     except Exception as e:
-        logger.error(f"程序发生异常: {e}")
+        logger.error(f"每日邮件发送过程中发生错误: {e}")
         logger.error(traceback.format_exc())
-        print(f"程序发生异常: {e}")
+        print(f"每日邮件发送失败: {e}")
+        return  # 发生错误时退出
+
+    logger.info("邮件发送完成，程序退出")
+    print("邮件发送完成，程序退出")
 
 
 if __name__ == "__main__":
