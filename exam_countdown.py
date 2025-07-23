@@ -252,39 +252,8 @@ def main():
     system = ExamCountdownSystem()
     
     # 显示启动信息
-    logger.info("考研倒计时邮件系统已启动，发送测试邮件验证运行状态...")
-    print("考研倒计时邮件系统已启动，发送测试邮件验证运行状态...")
-
-    # 发送测试邮件
-    try:
-        logger.info("开始发送测试邮件...")
-        print("开始发送测试邮件...")
-
-        # 生成鼓励语
-        logger.info("正在生成测试鼓励语...")
-        encouragement = system.generate_encouragement()
-        if encouragement:
-            logger.info("测试鼓励语生成成功")
-            print("测试鼓励语生成成功")
-        else:
-            logger.error("测试鼓励语生成失败")
-            print("测试鼓励语生成失败")
-
-        # 发送测试邮件
-        logger.info("正在发送测试邮件...")
-        print("正在发送测试邮件...")
-        if system.send_email():
-            logger.info("测试邮件发送成功")
-            print("测试邮件发送成功")
-        else:
-            logger.error("测试邮件发送失败，请检查配置")
-            print("测试邮件发送失败，请检查配置")
-
-    except Exception as e:
-        logger.error(f"测试邮件发送过程中发生错误: {e}")
-        logger.error(traceback.format_exc())
-        print(f"测试邮件发送失败: {e}")
-        return  # 发生错误时退出
+    logger.info("考研倒计时邮件系统已启动...")
+    print("考研倒计时邮件系统已启动...")
 
     # 发送每日邮件
     logger.info("准备发送每日邮件...")
