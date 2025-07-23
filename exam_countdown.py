@@ -190,7 +190,7 @@ class ExamCountdownSystem:
             msg = MIMEMultipart()
             msg['From'] = user
             msg['To'] = recipient
-            msg['Subject'] = f"【测试邮件】{subject} - 距离考研还有 {countdown['days']} 天"
+            msg['Subject'] = f"{subject} - 距离考研还有 {countdown['days']} 天"
             
             # 添加HTML内容
             msg.attach(MIMEText(html_content, 'html', 'utf-8'))
