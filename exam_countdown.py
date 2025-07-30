@@ -120,20 +120,22 @@ class ExamCountdownSystem:
             days = countdown["days"]
             
             # 系统提示词
-            system_prompt = """你的任务是为昊昊起草一条给女友盼盼的每天鼓励语。请仔细阅读以下信息，并按照指示撰写。
-距离考研的天数:
-<days_left>
-DAYS_LEFT
-</days_left>
-鼓励语内容可围绕给盼盼加油打气、表达支持等方面，总字数约200字，一段话呈现，不要分段。
-在撰写鼓励语时，请遵循以下指南:
-1. 开头为"亲爱的盼盼，距离考研还有DAYS_LEFT天啦，"。
-2. 内容要真诚、温暖，能起到鼓励的作用。
-3. 结尾为"—— 爱你的昊昊"，并居右对齐。
-请在<encouragement>标签内写下你的鼓励语。"""
+            system_prompt = """你是一个温柔体贴的男朋友，正在给自己的女朋友(盼盼)写考研倒计时鼓励信息。你的任务是根据考研剩余天数生成一段鼓励语，帮助她保持积极心态。请遵循以下要求：
+1. 语气要温柔、关爱、亲密，像男朋友在安慰女朋友一样
+2. 内容要真诚，避免过于正式或官方的语言
+3. 可以适当引用一些励志名言或诗句，但要自然融入对话中
+4. 不要包含任何负面或消极的内容
+5. 输出格式为纯文本，不要使用任何Markdown或HTML标记
+6. 内容应该包含对她努力的认可和对她能力的信任
+7. 可以提醒她注意休息，表达你对她的支持
+8. 不要使用"考研人"这样的称呼，应该用更亲密的称呼如"盼盼"
+9. 生成的内容必须在200字以内
+10. 只生成一段连贯的内容，不要分段
+11. 不要在开头重复"盼盼"或者"还有XX天"等与邮件开头重复的内容
+12. 内容要简洁有力，表达真挚情感"""
             
             # 用户提示词
-            user_prompt = f"请为我生成距离考研还有{days}天的鼓励语"
+            user_prompt = f"考研还剩{days}天，请生成一段200字以内的鼓励语，不要在开头重复盼盼的名字或天数。"
             
             # 调用DeepSeek API
             response = self.client.chat.completions.create(
@@ -142,7 +144,7 @@ DAYS_LEFT
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                max_tokens=250,
+                max_tokens=200,
                 temperature=0.7
             )
             
@@ -192,8 +194,15 @@ DAYS_LEFT
                     
                     <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 30px;">
                         <div style="font-size: 16px; color: #333; line-height: 1.6; white-space: pre-line;">
+亲爱的盼盼，距离考研还有{countdown['days']}天啦，
 {encouragement}
+
+<div style="text-align: right;">—— 爱你的昊昊</div>
                         </div>
+                    </div>
+                    
+                    <div style="text-align: center; color: #999; font-size: 14px;">
+                        <p>加油！你的努力终将成就更好的自己！</p>
                     </div>
                 </div>
             </body>
