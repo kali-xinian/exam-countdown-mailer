@@ -12,7 +12,8 @@ import os
 import sys
 import logging
 import traceback
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import smtplib
@@ -161,6 +162,15 @@ class ExamCountdownSystem:
             countdown = self.calculate_countdown()
             encouragement = self.generate_encouragement()
             
+            return self.send_email_with_content(countdown, encouragement, subject)
+        except Exception as e:
+            logger.error(f"发送邮件过程中发生致命错误: {e}")
+            logger.error(traceback.format_exc())
+            return False
+            
+    def send_email_with_content(self, countdown, encouragement, subject="考研倒计时"):
+        """使用已生成的内容发送邮件"""
+        try:
             if not countdown or not encouragement:
                 logger.error("缺少倒计时或鼓励语，无法发送邮件")
                 return False
@@ -279,21 +289,33 @@ def main():
     # 显示启动信息
     logger.info("考研倒计时邮件系统已启动...")
 
+    # 显示倒计时信息
+    countdown = system.calculate_countdown()
+    if countdown:
+        logger.info(f"距离考研还有 {countdown['days']} 天")
+    else:
+        logger.error("无法计算倒计时")
+        return
+
+    # 提前生成鼓励语
+    logger.info("正在生成鼓励语...")
+    encouragement = system.generate_encouragement()
+    if not encouragement:
+        logger.error("生成鼓励语失败")
+        return
+    
+    logger.info("鼓励语生成完成")
+
+    # 等待到早上8点
+    wait_until_8am()
+    
     # 发送每日邮件
     logger.info("准备发送每日邮件...")
 
     try:
-        # 显示倒计时信息
-        countdown = system.calculate_countdown()
-        if countdown:
-            logger.info(f"距离考研还有 {countdown['days']} 天")
-        else:
-            logger.error("无法计算倒计时")
-            return
-
-        # 发送每日邮件（send_email方法内部会生成鼓励语）
+        # 发送每日邮件（使用预先生成的鼓励语）
         logger.info("正在发送邮件...")
-        if system.send_email(subject="每日考研倒计时"):
+        if system.send_email_with_content(countdown, encouragement, subject="每日考研倒计时"):
             logger.info("邮件发送成功")
             print("邮件发送成功")
         else:
@@ -308,6 +330,45 @@ def main():
 
     logger.info("程序执行完成")
     print("程序执行完成")
+
+
+def wait_until_8am():
+    """等待到当天早上8点"""
+    now = datetime.now()
+    next_8am = now.replace(hour=8, minute=0, second=0, microsecond=0)
+    
+    # 如果当前时间已经过了今天的8点，则等待明天的8点
+    if now >= next_8am:
+        next_8am += timedelta(days=1)
+    
+    # 计算需要等待的时间
+    wait_seconds = (next_8am - now).total_seconds()
+    
+    if wait_seconds > 0:
+        logger.info(f"当前时间: {now.strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"等待到: {next_8am.strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"需要等待 {wait_seconds} 秒")
+        
+        # 如果需要等待的时间超过1小时，记录警告信息
+        if wait_seconds > 3600:
+            logger.warning(f"等待时间较长 ({wait_seconds/3600:.1f} 小时)，请确认系统时间设置正确")
+        
+        # 分批等待，避免长时间阻塞
+        while wait_seconds > 0:
+            # 每次最多等待1分钟
+            sleep_time = min(wait_seconds, 60)
+            time.sleep(sleep_time)
+            wait_seconds -= sleep_time
+            
+            # 更新当前时间和剩余等待时间
+            now = datetime.now()
+            wait_seconds = (next_8am - now).total_seconds()
+            
+            # 每10分钟记录一次等待状态
+            if int(wait_seconds) % 600 == 0 or wait_seconds < 60:
+                logger.info(f"仍在等待中...预计还需要 {wait_seconds:.0f} 秒")
+
+    logger.info("已到达指定时间，开始执行任务")
 
 
 if __name__ == "__main__":
