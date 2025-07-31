@@ -45,7 +45,7 @@ DEFAULT_CONFIG = {
     "EMAIL_PORT_TLS": 587,  # TLS端口
     "EMAIL_USER": "1969365257@qq.com",
     "EMAIL_PASSWORD": "rxjizuniwsukfaef",
-    "EMAIL_RECIPIENT": "2802033546@qq.com",
+    "EMAIL_RECIPIENT": "1801169454@qq.com",
     "EMAIL_CONNECTION_TYPE": "SSL",  # SSL或TLS
 }
 
