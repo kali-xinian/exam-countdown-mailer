@@ -289,47 +289,46 @@ def main():
     # 显示启动信息
     logger.info("考研倒计时邮件系统已启动...")
 
-    # 显示倒计时信息
-    countdown = system.calculate_countdown()
-    if countdown:
-        logger.info(f"距离考研还有 {countdown['days']} 天")
-    else:
-        logger.error("无法计算倒计时")
-        return
-
-    # 提前生成鼓励语
-    logger.info("正在生成鼓励语...")
-    encouragement = system.generate_encouragement()
-    if not encouragement:
-        logger.error("生成鼓励语失败")
-        return
-    
-    logger.info("鼓励语生成完成")
-
     # 等待到早上8点
     wait_until_8am()
     
-    # 发送每日邮件
-    logger.info("准备发送每日邮件...")
+    # 显示倒计时信息并发送邮件
+    while True:
+        try:
+            # 显示倒计时信息
+            countdown = system.calculate_countdown()
+            if countdown:
+                logger.info(f"距离考研还有 {countdown['days']} 天")
+            else:
+                logger.error("无法计算倒计时")
+                # 如果考研时间已过，退出程序
+                logger.info("考研时间已过，程序退出")
+                print("考研时间已过，程序退出")
+                return
 
-    try:
-        # 发送每日邮件（使用预先生成的鼓励语）
-        logger.info("正在发送邮件...")
-        if system.send_email_with_content(countdown, encouragement, subject="每日考研倒计时"):
-            logger.info("邮件发送成功")
-            print("邮件发送成功")
-        else:
-            logger.error("邮件发送失败")
-            print("邮件发送失败")
+            # 发送每日邮件（在发送时生成最新的倒计时和鼓励语）
+            logger.info("正在发送邮件...")
+            if system.send_email(subject="每日考研倒计时"):
+                logger.info("邮件发送成功")
+                print("邮件发送成功")
+            else:
+                logger.error("邮件发送失败")
+                print("邮件发送失败")
 
-    except Exception as e:
-        logger.error(f"邮件发送过程中发生错误: {e}")
-        logger.error(traceback.format_exc())
-        print(f"邮件发送失败: {e}")
-        return  # 发生错误时退出
-
-    logger.info("程序执行完成")
-    print("程序执行完成")
+            logger.info("程序执行完成")
+            print("程序执行完成")
+            
+            # 每天执行一次即可，成功发送邮件后退出
+            return
+            
+        except Exception as e:
+            logger.error(f"发生错误: {e}")
+            logger.error(traceback.format_exc())
+            print(f"发生错误: {e}")
+            
+            # 等待一段时间后重试
+            logger.info("等待1小时后重试...")
+            time.sleep(3600)  # 等待1小时
 
 
 def wait_until_8am():
