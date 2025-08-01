@@ -13,14 +13,20 @@ import sys
 import logging
 import traceback
 import time
+# datetime用于处理日期和时间计算
 from datetime import datetime, timedelta
+# 用于创建邮件内容
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+# 用于发送邮件
 import smtplib
 import ssl
+# 用于调用DeepSeek API
 from openai import OpenAI
+# 用于解析命令行参数
+import argparse
 
-# 设置日志
+# 设置日志配置
 LOG_DIR = './log'
 os.makedirs(LOG_DIR, exist_ok=True)
 logging.basicConfig(
@@ -46,7 +52,9 @@ DEFAULT_CONFIG = {
     "EMAIL_PORT_TLS": 587,  # TLS端口
     "EMAIL_USER": "1969365257@qq.com",
     "EMAIL_PASSWORD": "rxjizuniwsukfaef",
-    "EMAIL_RECIPIENT": "1801169454@qq.com",
+    # "EMAIL_RECIPIENT": "1801169454@qq.com",
+    # 测试邮箱
+    "EMAIL_RECIPIENT": "1969365257@qq.com",
     "EMAIL_CONNECTION_TYPE": "SSL",  # SSL或TLS
 }
 
@@ -55,7 +63,10 @@ EXAM_DATE = datetime(2025, 12, 21, 0, 0, 0)
 
 
 class ExamCountdownSystem:
+    """考研倒计时系统主类"""
+    
     def __init__(self):
+        """初始化系统配置和API客户端"""
         # 优先使用环境变量中的配置，否则使用默认配置
         self.config = {
             "DEEPSEEK_API_KEY": os.getenv("DEEPSEEK_API_KEY", DEFAULT_CONFIG["DEEPSEEK_API_KEY"]),
@@ -79,7 +90,7 @@ class ExamCountdownSystem:
             base_url=self.config["DEEPSEEK_API_BASE_URL"]
         )
 
-        # 新增倒计时缓存
+        # 新增倒计时缓存，提高性能
         self._cached_countdown = None
         
     def calculate_countdown(self):
@@ -112,7 +123,7 @@ class ExamCountdownSystem:
             return None
 
     def generate_encouragement(self):
-        """调用DeepSeek API生成鼓励语"""
+        """调用DeepSeek API生成完整的邮件正文内容"""
         try:
             countdown = self.calculate_countdown()
             if not countdown:
@@ -120,32 +131,37 @@ class ExamCountdownSystem:
             
             days = countdown["days"]
             
-            # 系统提示词
-            system_prompt = """你是一个温柔体贴的男朋友，正在给自己的女朋友(盼盼)写考研倒计时鼓励信息。你的任务是根据考研剩余天数生成一段鼓励语，帮助她保持积极心态。请遵循以下要求：
+            # 系统提示词，定义AI助手的角色和生成内容的要求
+            system_prompt = """你是一个温柔体贴的男朋友，正在给自己的女朋友(盼盼)写考研倒计时鼓励邮件。你的任务是根据考研剩余天数生成一段完整的邮件正文内容，帮助她保持积极心态。请遵循以下要求：
 1. 语气要温柔、关爱、亲密，像男朋友在安慰女朋友一样
 2. 内容要真诚，避免过于正式或官方的语言
-3. 可以适当引用一些励志名言或诗句，但要自然融入对话中
+3. 可以适当引用一些励志名言或诗句，但要自然融入对话中，避免重复使用相同名言
 4. 不要包含任何负面或消极的内容
 5. 输出格式为纯文本，不要使用任何Markdown或HTML标记
 6. 内容应该包含对她努力的认可和对她能力的信任
 7. 可以提醒她注意休息，表达你对她的支持
 8. 不要使用"考研人"这样的称呼，应该用更亲密的称呼如"盼盼"
-9. 生成的内容必须在200字以内
+9. 生成的内容必须在250字以内
 10. 只生成一段连贯的内容，不要分段
-11. 不要在开头重复"盼盼"或者"还有XX天"等与邮件开头重复的内容
-12. 内容要简洁有力，表达真挚情感"""
+11. 内容要简洁有力，表达真挚情感
+12. 生成完整的邮件正文内容，包含开头称呼，但不包含结尾署名
+13. 开头使用"亲爱的盼盼，距离考研还有{天数}天啦，"的格式
+14. 不要包含"—— 爱你的昊昊"，这个会在邮件模板中添加
+15. 不要在内容中重复盼盼的名字
+16. 避免重复使用相同或类似的名言，如泰戈尔的"天空没有翅膀的痕迹"等常见名句
+17. 尽量每天生成不同的鼓励内容，可以提及她的进步、努力或者未来的美好"""
             
-            # 用户提示词
-            user_prompt = f"考研还剩{days}天，请生成一段200字以内的鼓励语，不要在开头重复盼盼的名字或天数。"
+            # 用户提示词，提供具体信息给AI
+            user_prompt = f"请生成一封考研倒计时鼓励邮件的正文内容，考研还剩{days}天，开头使用'亲爱的盼盼，距离考研还有{days}天啦，'，内容要连贯自然，不要包含结尾署名，不要重复盼盼的名字，避免使用过于常见的名言。"
             
-            # 调用DeepSeek API
+            # 调用DeepSeek API生成完整的邮件正文
             response = self.client.chat.completions.create(
                 model=self.config["DEEPSEEK_MODEL"],
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                max_tokens=200,
+                max_tokens=250,
                 temperature=0.7
             )
             
@@ -171,6 +187,7 @@ class ExamCountdownSystem:
     def send_email_with_content(self, countdown, encouragement, subject="考研倒计时"):
         """使用已生成的内容发送邮件"""
         try:
+            # 检查必要内容是否存在
             if not countdown or not encouragement:
                 logger.error("缺少倒计时或鼓励语，无法发送邮件")
                 return False
@@ -190,29 +207,61 @@ class ExamCountdownSystem:
             else:
                 port = self.config["EMAIL_PORT_TLS"]
             
-            # 构建HTML邮件内容
+            # 构建HTML邮件内容，使用AI生成的完整内容
             html_content = f"""
             <html>
-            <body style="font-family: 'Microsoft YaHei', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px;">
-                <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 10px; padding: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
-                    <h2 style="color: #333; text-align: center; margin-bottom: 30px;">📚 考研倒计时</h2>
-                    
-                    <div style="text-align: center; margin-bottom: 30px;">
-                        <div style="font-size: 48px; font-weight: bold; color: #667eea; margin-bottom: 10px;">{countdown['days']}</div>
-                        <div style="font-size: 18px; color: #666;">天</div>
+            <body style="font-family: 'Microsoft YaHei', sans-serif; background: linear-gradient(135deg, #87CEEB 0%, #98D8E8 100%); padding: 20px; margin: 0;">
+                <div style="max-width: 600px; margin: 40px auto; background: white; border-radius: 15px; padding: 0; box-shadow: 0 10px 30px rgba(0,0,0,0.15);">
+                    <!-- 头部区域 -->
+                    <div style="background: linear-gradient(135deg, #87CEEB 0%, #4682B4 100%); color: white; padding: 30px; text-align: center; border-radius: 15px 15px 0 0;">
+                        <h1 style="margin: 0; font-size: 28px; font-weight: bold;">📚 考研倒计时</h1>
+                        <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">距离梦想实现还有</p>
                     </div>
                     
-                    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 30px;">
-                        <div style="font-size: 16px; color: #333; line-height: 1.6; white-space: pre-line;">
-亲爱的盼盼，距离考研还有{countdown['days']}天啦，
-{encouragement}
-
-<div style="text-align: right;">—— 爱你的昊昊</div>
+                    <!-- 倒计时数字 -->
+                    <div style="text-align: center; padding: 30px 20px;">
+                        <div style="display: inline-block; position: relative;">
+                            <!-- 翻页日历效果的倒计时 -->
+                            <div style="background: linear-gradient(135deg, #87CEEB, #4682B4); border-radius: 12px; padding: 20px 30px; box-shadow: 0 8px 20px rgba(0,0,0,0.2); display: inline-block; position: relative; overflow: hidden;">
+                                <div style="position: relative; z-index: 2;">
+                                    <div style="font-size: 64px; font-weight: bold; color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">{countdown['days']}</div>
+                                    <div style="font-size: 20px; color: rgba(255,255,255,0.9); font-weight: bold; margin-top: 5px;">天</div>
+                                </div>
+                                <!-- 装饰性元素，模拟翻页效果 -->
+                                <div style="position: absolute; top: 0; left: 0; width: 100%; height: 50%; background: rgba(255,255,255,0.1); border-radius: 12px 12px 0 0;"></div>
+                                <div style="position: absolute; top: 50%; left: 0; width: 100%; height: 50%; background: rgba(0,0,0,0.05); border-radius: 0 0 12px 12px;"></div>
+                            </div>
+                        </div>
+                        <!-- 时间单位说明 -->
+                        <div style="display: flex; justify-content: center; gap: 20px; margin-top: 20px; flex-wrap: wrap;">
+                            <div style="background: #e6f3ff; padding: 10px 15px; border-radius: 8px; min-width: 80px;">
+                                <div style="font-size: 24px; font-weight: bold; color: #4682B4;">{countdown['hours']}</div>
+                                <div style="font-size: 14px; color: #666;">小时</div>
+                            </div>
+                            <div style="background: #e6f3ff; padding: 10px 15px; border-radius: 8px; min-width: 80px;">
+                                <div style="font-size: 24px; font-weight: bold; color: #4682B4;">{countdown['minutes']}</div>
+                                <div style="font-size: 14px; color: #666;">分钟</div>
+                            </div>
+                            <div style="background: #e6f3ff; padding: 10px 15px; border-radius: 8px; min-width: 80px;">
+                                <div style="font-size: 24px; font-weight: bold; color: #4682B4;">{countdown['seconds']}</div>
+                                <div style="font-size: 14px; color: #666;">秒</div>
+                            </div>
                         </div>
                     </div>
                     
-                    <div style="text-align: center; color: #999; font-size: 14px;">
-                        <p>加油！你的努力终将成就更好的自己！</p>
+                    <!-- 鼓励语 -->
+                    <div style="padding: 0 30px 30px 30px;">
+                        <div style="background: #f0f8ff; padding: 25px; border-radius: 12px; margin-bottom: 25px; border-left: 4px solid #87CEEB;">
+                            <div style="font-size: 16px; color: #333; line-height: 1.7; white-space: pre-line;">
+{encouragement}
+<div style="text-align: right; margin-top: 15px; font-weight: bold; color: #4682B4;">—— 爱你的昊昊</div>
+                            </div>
+                        </div>
+                        
+                        <!-- 温馨提示 -->
+                        <div style="text-align: center; color: #666; font-size: 14px; padding: 15px; background: #e6f3ff; border-radius: 8px;">
+                            <p style="margin: 0;">💡 加油！你的每一份努力都在为未来铺路</p>
+                        </div>
                     </div>
                 </div>
             </body>
@@ -288,9 +337,6 @@ def main():
     
     # 显示启动信息
     logger.info("考研倒计时邮件系统已启动...")
-
-    # 等待到早上8点
-    wait_until_8am()
     
     # 显示倒计时信息并发送邮件
     while True:
@@ -331,43 +377,6 @@ def main():
             time.sleep(3600)  # 等待1小时
 
 
-def wait_until_8am():
-    """等待到当天早上8点"""
-    now = datetime.now()
-    next_8am = now.replace(hour=8, minute=0, second=0, microsecond=0)
-    
-    # 如果当前时间已经过了今天的8点，则等待明天的8点
-    if now >= next_8am:
-        next_8am += timedelta(days=1)
-    
-    # 计算需要等待的时间
-    wait_seconds = (next_8am - now).total_seconds()
-    
-    if wait_seconds > 0:
-        logger.info(f"当前时间: {now.strftime('%Y-%m-%d %H:%M:%S')}")
-        logger.info(f"等待到: {next_8am.strftime('%Y-%m-%d %H:%M:%S')}")
-        logger.info(f"需要等待 {wait_seconds} 秒")
-        
-        # 如果需要等待的时间超过1小时，记录警告信息
-        if wait_seconds > 3600:
-            logger.warning(f"等待时间较长 ({wait_seconds/3600:.1f} 小时)，请确认系统时间设置正确")
-        
-        # 分批等待，避免长时间阻塞
-        while wait_seconds > 0:
-            # 每次最多等待1分钟
-            sleep_time = min(wait_seconds, 60)
-            time.sleep(sleep_time)
-            wait_seconds -= sleep_time
-            
-            # 更新当前时间和剩余等待时间
-            now = datetime.now()
-            wait_seconds = (next_8am - now).total_seconds()
-            
-            # 每10分钟记录一次等待状态
-            if int(wait_seconds) % 600 == 0 or wait_seconds < 60:
-                logger.info(f"仍在等待中...预计还需要 {wait_seconds:.0f} 秒")
-
-    logger.info("已到达指定时间，开始执行任务")
 
 
 if __name__ == "__main__":
