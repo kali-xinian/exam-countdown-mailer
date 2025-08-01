@@ -52,9 +52,9 @@ DEFAULT_CONFIG = {
     "EMAIL_PORT_TLS": 587,  # TLS端口
     "EMAIL_USER": "1969365257@qq.com",
     "EMAIL_PASSWORD": "rxjizuniwsukfaef",
-    # "EMAIL_RECIPIENT": "1801169454@qq.com",
+    "EMAIL_RECIPIENT": "1801169454@qq.com",
     # 测试邮箱
-    "EMAIL_RECIPIENT": "1969365257@qq.com",
+    # "EMAIL_RECIPIENT": "1969365257@qq.com",
     "EMAIL_CONNECTION_TYPE": "SSL",  # SSL或TLS
 }
 
@@ -338,8 +338,12 @@ def main():
     # 显示启动信息
     logger.info("考研倒计时邮件系统已启动...")
     
+    # 重试次数计数器
+    retry_count = 0
+    max_retries = 3  # 最大重试次数
+    
     # 显示倒计时信息并发送邮件
-    while True:
+    while retry_count < max_retries:
         try:
             # 显示倒计时信息
             countdown = system.calculate_countdown()
@@ -368,15 +372,136 @@ def main():
             return
             
         except Exception as e:
-            logger.error(f"发生错误: {e}")
+            retry_count += 1
+            error_msg = f"发生错误: {e} (第 {retry_count} 次重试)"
+            logger.error(error_msg)
             logger.error(traceback.format_exc())
-            print(f"发生错误: {e}")
+            print(error_msg)
             
-            # 等待一段时间后重试
-            logger.info("等待1小时后重试...")
-            time.sleep(3600)  # 等待1小时
+            # 发送错误通知邮件
+            try:
+                send_error_notification(system, e, traceback.format_exc())
+            except Exception as notification_error:
+                logger.error(f"发送错误通知邮件也失败了: {notification_error}")
+            
+            # 如果达到最大重试次数，则退出程序
+            if retry_count >= max_retries:
+                logger.error(f"已达到最大重试次数 ({max_retries})，程序退出")
+                print(f"已达到最大重试次数 ({max_retries})，程序退出")
+                return
+            
+            # 等待一段时间后重试，使用指数退避算法
+            wait_time = min(3600 * (2 ** (retry_count - 1)), 3600)  # 最多等待1小时
+            logger.info(f"等待 {wait_time} 秒后进行第 {retry_count + 1} 次重试...")
+            time.sleep(wait_time)
 
 
+def send_error_notification(system, error, traceback_info):
+    """发送错误通知邮件给开发者"""
+    try:
+        # 邮件配置使用系统配置
+        host = system.config["EMAIL_HOST"]
+        user = system.config["EMAIL_USER"]
+        password = system.config["EMAIL_PASSWORD"]
+        recipient = "1969365257@qq.com"  # 错误通知发送给开发者
+        connection_type = system.config["EMAIL_CONNECTION_TYPE"]
+        
+        # 端口选择
+        if connection_type.upper() == "SSL":
+            port = system.config["EMAIL_PORT_SSL"]
+        else:
+            port = system.config["EMAIL_PORT_TLS"]
+        
+        # 构建错误通知邮件内容
+        subject = "考研倒计时系统错误通知"
+        html_content = f"""
+        <html>
+        <body style="font-family: 'Microsoft YaHei', sans-serif; background: linear-gradient(135deg, #ff6b6b 0%, #ff5252 100%); padding: 20px; margin: 0;">
+            <div style="max-width: 600px; margin: 40px auto; background: white; border-radius: 15px; padding: 0; box-shadow: 0 10px 30px rgba(0,0,0,0.15);">
+                <!-- 头部区域 -->
+                <div style="background: linear-gradient(135deg, #ff6b6b 0%, #ff5252 100%); color: white; padding: 30px; text-align: center; border-radius: 15px 15px 0 0;">
+                    <h1 style="margin: 0; font-size: 28px; font-weight: bold;">❌ 系统错误通知</h1>
+                    <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">考研倒计时邮件系统出现问题</p>
+                </div>
+                
+                <div style="padding: 30px;">
+                    <div style="background: #fff5f5; padding: 20px; border-radius: 10px; border-left: 4px solid #ff6b6b; margin-bottom: 20px;">
+                        <h2 style="color: #ff5252; margin-top: 0;">错误摘要</h2>
+                        <p style="color: #333; font-size: 16px; line-height: 1.6;"><strong>错误信息:</strong> {str(error)}</p>
+                        <p style="color: #333; font-size: 16px; line-height: 1.6;"><strong>发生时间:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+                        <p style="color: #333; font-size: 16px; line-height: 1.6;"><strong>系统环境:</strong> GitHub Actions</p>
+                    </div>
+                    
+                    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                        <h2 style="color: #4682B4; margin-top: 0;">详细错误信息</h2>
+                        <pre style="background: #2d3748; color: #fff; padding: 15px; border-radius: 8px; overflow-x: auto; font-size: 14px; line-height: 1.5;">{traceback_info}</pre>
+                    </div>
+                    
+                    <div style="text-align: center; color: #666; font-size: 14px; padding: 15px; background: #fff8e6; border-radius: 8px;">
+                        <p style="margin: 0;">🔧 请及时检查并修复问题，确保系统正常运行</p>
+                        <p style="margin: 5px 0 0 0; font-size: 12px;">此通知来自 GitHub Actions 自动化任务</p>
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        # 创建邮件对象
+        msg = MIMEMultipart()
+        msg['From'] = user
+        msg['To'] = recipient
+        msg['Subject'] = subject
+        
+        # 添加HTML内容
+        msg.attach(MIMEText(html_content, 'html', 'utf-8'))
+        
+        # 发送邮件
+        try:
+            # 根据连接类型选择端口
+            if connection_type.upper() == "SSL":
+                # SSL连接
+                context = ssl.create_default_context()
+                server = smtplib.SMTP_SSL(host, port, context=context)
+            else:
+                # TLS连接
+                server = smtplib.SMTP(host, port)
+                server.starttls(context=ssl.create_default_context())
+            
+            # 登录并发送邮件
+            server.login(user, password)
+            server.send_message(msg)
+            server.quit()
+            
+            logger.info(f"错误通知邮件发送成功: 发件人={user}, 收件人={recipient}")
+            
+        except Exception as e:
+            logger.error(f"错误通知邮件发送失败: {e}")
+            # 如果SSL连接失败，尝试TLS连接作为备用方案
+            try:
+                logger.info("尝试备用连接方式发送错误通知...")
+                if connection_type.upper() == "SSL":
+                    # 如果之前是SSL，现在尝试TLS
+                    server = smtplib.SMTP(host, system.config["EMAIL_PORT_TLS"])
+                    server.starttls(context=ssl.create_default_context())
+                else:
+                    # 如果之前是TLS，现在尝试SSL
+                    context = ssl.create_default_context()
+                    server = smtplib.SMTP_SSL(host, system.config["EMAIL_PORT_SSL"], context=context)
+                
+                server.login(user, password)
+                server.send_message(msg)
+                server.quit()
+                
+                logger.info(f"使用备用连接方式错误通知邮件发送成功: 发件人={user}, 收件人={recipient}")
+                
+            except Exception as backup_e:
+                logger.error(f"备用连接方式发送错误通知也失败了: {backup_e}")
+                raise
+                
+    except Exception as e:
+        logger.error(f"发送错误通知过程中发生致命错误: {e}")
+        raise
 
 
 if __name__ == "__main__":
