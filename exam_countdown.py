@@ -52,8 +52,8 @@ DEFAULT_CONFIG = {
     "EMAIL_PORT_TLS": 587,  # TLS端口
     "EMAIL_USER": "1969365257@qq.com",
     "EMAIL_PASSWORD": "rxjizuniwsukfaef",
-    "EMAIL_RECIPIENT": "1801169454@qq.com",
-    # 测试邮箱
+    "EMAIL_RECIPIENT": "1801169454@qq.com",  # 盼盼的邮箱
+    # 测试邮箱（调试时使用）
     # "EMAIL_RECIPIENT": "1969365257@qq.com",
     "EMAIL_CONNECTION_TYPE": "SSL",  # SSL或TLS
 }
@@ -358,18 +358,30 @@ def main():
 
             # 发送每日邮件（在发送时生成最新的倒计时和鼓励语）
             logger.info("正在发送邮件...")
-            if system.send_email(subject="每日考研倒计时"):
+            email_success = system.send_email(subject="每日考研倒计时")
+
+            if email_success:
                 logger.info("邮件发送成功")
                 print("邮件发送成功")
+                logger.info("程序执行完成")
+                print("程序执行完成")
+                # 每天执行一次即可，成功发送邮件后退出
+                return
             else:
-                logger.error("邮件发送失败")
-                print("邮件发送失败")
+                # 邮件发送失败，立即发送错误通知
+                error_msg = "邮件发送失败 - 未抛出异常但返回False"
+                logger.error(error_msg)
+                print(error_msg)
 
-            logger.info("程序执行完成")
-            print("程序执行完成")
-            
-            # 每天执行一次即可，成功发送邮件后退出
-            return
+                # 发送错误通知邮件
+                try:
+                    send_error_notification(system, Exception(error_msg), "邮件发送失败，具体错误请查看系统日志")
+                    logger.info("已发送邮件发送失败的错误通知")
+                except Exception as notification_error:
+                    logger.error(f"发送错误通知邮件也失败了: {notification_error}")
+
+                # 继续重试流程
+                raise Exception(error_msg)
             
         except Exception as e:
             retry_count += 1
@@ -386,8 +398,17 @@ def main():
             
             # 如果达到最大重试次数，则退出程序
             if retry_count >= max_retries:
-                logger.error(f"已达到最大重试次数 ({max_retries})，程序退出")
-                print(f"已达到最大重试次数 ({max_retries})，程序退出")
+                final_error_msg = f"已达到最大重试次数 ({max_retries})，程序退出 - 今日邮件发送彻底失败"
+                logger.error(final_error_msg)
+                print(final_error_msg)
+
+                # 发送最终失败通知
+                try:
+                    send_error_notification(system, Exception(final_error_msg), f"重试{max_retries}次后仍然失败，最后一次错误: {e}\n\n{traceback.format_exc()}")
+                    logger.info("已发送最终失败的错误通知")
+                except Exception as final_notification_error:
+                    logger.error(f"发送最终失败通知也失败了: {final_notification_error}")
+
                 return
             
             # 等待一段时间后重试，使用指数退避算法
@@ -399,6 +420,18 @@ def main():
 def send_error_notification(system, error, traceback_info):
     """发送错误通知邮件给开发者"""
     try:
+        # 读取最新的日志内容
+        log_content = ""
+        try:
+            log_file_path = os.path.join(LOG_DIR, 'exam_countdown.log')
+            if os.path.exists(log_file_path):
+                with open(log_file_path, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+                    # 获取最后50行日志
+                    log_content = ''.join(lines[-50:]) if len(lines) > 50 else ''.join(lines)
+        except Exception as log_error:
+            log_content = f"无法读取日志文件: {log_error}"
+
         # 邮件配置使用系统配置
         host = system.config["EMAIL_HOST"]
         user = system.config["EMAIL_USER"]
@@ -413,33 +446,51 @@ def send_error_notification(system, error, traceback_info):
             port = system.config["EMAIL_PORT_TLS"]
         
         # 构建错误通知邮件内容
-        subject = "考研倒计时系统错误通知"
+        subject = "🚨 考研倒计时系统错误通知 - 需要立即处理"
         html_content = f"""
         <html>
         <body style="font-family: 'Microsoft YaHei', sans-serif; background: linear-gradient(135deg, #ff6b6b 0%, #ff5252 100%); padding: 20px; margin: 0;">
-            <div style="max-width: 600px; margin: 40px auto; background: white; border-radius: 15px; padding: 0; box-shadow: 0 10px 30px rgba(0,0,0,0.15);">
+            <div style="max-width: 800px; margin: 40px auto; background: white; border-radius: 15px; padding: 0; box-shadow: 0 10px 30px rgba(0,0,0,0.15);">
                 <!-- 头部区域 -->
                 <div style="background: linear-gradient(135deg, #ff6b6b 0%, #ff5252 100%); color: white; padding: 30px; text-align: center; border-radius: 15px 15px 0 0;">
-                    <h1 style="margin: 0; font-size: 28px; font-weight: bold;">❌ 系统错误通知</h1>
-                    <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">考研倒计时邮件系统出现问题</p>
+                    <h1 style="margin: 0; font-size: 28px; font-weight: bold;">🚨 系统错误通知</h1>
+                    <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">考研倒计时邮件系统出现问题，需要立即处理</p>
                 </div>
-                
+
                 <div style="padding: 30px;">
                     <div style="background: #fff5f5; padding: 20px; border-radius: 10px; border-left: 4px solid #ff6b6b; margin-bottom: 20px;">
                         <h2 style="color: #ff5252; margin-top: 0;">错误摘要</h2>
                         <p style="color: #333; font-size: 16px; line-height: 1.6;"><strong>错误信息:</strong> {str(error)}</p>
                         <p style="color: #333; font-size: 16px; line-height: 1.6;"><strong>发生时间:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
                         <p style="color: #333; font-size: 16px; line-height: 1.6;"><strong>系统环境:</strong> GitHub Actions</p>
+                        <p style="color: #333; font-size: 16px; line-height: 1.6;"><strong>影响:</strong> 盼盼可能没有收到今天的考研倒计时邮件</p>
                     </div>
-                    
+
                     <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
                         <h2 style="color: #4682B4; margin-top: 0;">详细错误信息</h2>
-                        <pre style="background: #2d3748; color: #fff; padding: 15px; border-radius: 8px; overflow-x: auto; font-size: 14px; line-height: 1.5;">{traceback_info}</pre>
+                        <pre style="background: #2d3748; color: #fff; padding: 15px; border-radius: 8px; overflow-x: auto; font-size: 12px; line-height: 1.4; max-height: 300px;">{traceback_info}</pre>
                     </div>
-                    
+
+                    <div style="background: #e8f4fd; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                        <h2 style="color: #1976d2; margin-top: 0;">最近系统日志</h2>
+                        <pre style="background: #263238; color: #b0bec5; padding: 15px; border-radius: 8px; overflow-x: auto; font-size: 11px; line-height: 1.3; max-height: 400px;">{log_content}</pre>
+                    </div>
+
+                    <div style="background: #fff3cd; padding: 20px; border-radius: 10px; border-left: 4px solid #ffc107; margin-bottom: 20px;">
+                        <h2 style="color: #856404; margin-top: 0;">建议处理步骤</h2>
+                        <ol style="color: #333; font-size: 14px; line-height: 1.6; margin: 0; padding-left: 20px;">
+                            <li>检查GitHub Actions工作流执行状态</li>
+                            <li>验证GitHub Secrets配置（DEEPSEEK_API_KEY, EMAIL_PASSWORD）</li>
+                            <li>检查QQ邮箱授权码是否有效</li>
+                            <li>查看DeepSeek API配额是否充足</li>
+                            <li>手动触发工作流进行测试</li>
+                            <li>如果问题持续，考虑手动发送邮件给盼盼</li>
+                        </ol>
+                    </div>
+
                     <div style="text-align: center; color: #666; font-size: 14px; padding: 15px; background: #fff8e6; border-radius: 8px;">
-                        <p style="margin: 0;">🔧 请及时检查并修复问题，确保系统正常运行</p>
-                        <p style="margin: 5px 0 0 0; font-size: 12px;">此通知来自 GitHub Actions 自动化任务</p>
+                        <p style="margin: 0;">⚡ 请尽快处理此问题，确保盼盼能及时收到考研倒计时邮件</p>
+                        <p style="margin: 5px 0 0 0; font-size: 12px;">此通知来自 GitHub Actions 自动化任务 | 时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
                     </div>
                 </div>
             </div>
